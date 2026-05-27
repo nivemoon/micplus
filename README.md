@@ -1,4 +1,4 @@
-# MicPlus / MicCtl
+# MicPlus
 
 Набор утилит для управления микрофоном в Windows:
 
