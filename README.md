@@ -1,6 +1,6 @@
 # MicPlus
 
-Глобальная система контроля жизни микрофона: **mute / unmute / push-to-talk (PTT)**.
+Глобальная система контроля жизни микрофона: **вкл/выкл/рация**.
 
 Проект состоит из двух утилит:
 
@@ -13,10 +13,10 @@
 
 ## Возможности
 
-- Режим **push-to-talk (PTT)**:
+- Режим рации **push-to-talk (PTT)**:
   - боковые кнопки мыши (MB4/MB5);
-  - любая клавиша клавиатуры.
-- Глобальный **toggle-хоткей**:
+  - любая клавиша клавиатуры/мыши.
+- Глобальное переключение **toggle-хоткей**:
   - F9 / F10 из коробки;
   - любое пользовательское сочетание (клавиша либо Ctrl/Alt/Shift/Win + клавиша).
 - Индикатор состояния микрофона в трее:
@@ -26,7 +26,7 @@
 
 ## Установка
 
-1. Зайдите в раздел [Releases](https://github.com/nivemoon/micplus/releases) и скачайте последний релиз (`micplus.exe` и `micctl.exe`).[page:1]
+1. Зайдите в раздел [Releases](https://github.com/nivemoon/micplus/releases) и скачайте последний релиз (`micplus.exe` и `micctl.exe`).
 2. Поместите оба файла в одну папку.
 3. Запустите `micplus.exe`.
 4. В системном трее появится иконка MicPlus.
@@ -37,7 +37,7 @@
 
 - Правый клик по иконке в трее:
   - выбор PTT-кнопки (MB4 / MB5 или кастомная клавиша);
-  - выбор toggle-хоткея (F9 / F10 / Custom);
+  - выбор toggle-хоткея (F9 / F10 / Назначить);
   - включение/выключение PTT-режима;
   - смена языка интерфейса;
   - выход из приложения.
@@ -46,7 +46,7 @@
 
 ## Сборка из исходников
 
-Исходники и ресурсы лежат в каталогах `src/` и `res/`.[page:1]
+Исходники и ресурсы лежат в каталогах `src/` и `res/`.
 
 Требуется MinGW-w64 или другой компилятор с поддержкой WinAPI.
 
@@ -68,11 +68,11 @@ README.md
 LICENSE
 ```
 
-Готовые бинарники (`micplus.exe`, `micctl.exe`) публикуются в разделе Releases и в репозитории по умолчанию не хранятся.[page:1]
+Готовые бинарники (`micplus.exe`, `micctl.exe`) публикуются в разделе Releases и в репозитории по умолчанию не хранятся.
 
 ## Лицензия
 
-Проект распространяется по лицензии MIT. См. файл [`LICENSE`](LICENSE).[page:1]
+Проект распространяется по лицензии MIT. См. файл [`LICENSE`](LICENSE).
 
 ---
 
@@ -100,11 +100,11 @@ It consists of two parts:
 
 ### Installation
 
-1. Download the latest release from [Releases](https://github.com/nivemoon/micplus/releases).[page:1]
+1. Download the latest release from [Releases](https://github.com/nivemoon/micplus/releases).
 2. Put `micplus.exe` and `micctl.exe` into the same folder.
 3. Run `micplus.exe` — a MicPlus icon will appear in the system tray.
 4. Configure hotkeys and PTT mode from the tray context menu.
 
 ### Build
 
-See the Russian section above for a MinGW / gcc build example from `src/` and `res/` folders.[page:1]
+See the Russian section above for a MinGW / gcc build example from `src/` and `res/` folders.
