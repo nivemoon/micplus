@@ -1,0 +1,7 @@
+#define IDI_APPICON   101
+#define IDI_ICON_ON   102
+#define IDI_ICON_OFF  103
+
+IDI_APPICON ICON "pttffn.ico"
+IDI_ICON_ON ICON "micplus_on.ico"
+IDI_ICON_OFF ICON "micplus_off.ico"
