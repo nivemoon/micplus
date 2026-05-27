@@ -1,68 +1,110 @@
 # MicPlus
 
-Набор утилит для управления микрофоном в Windows:
+Глобальная система контроля жизни микрофона: **mute / unmute / push-to-talk (PTT)**.
 
-- `micplus.exe` — иконка в трее, PTT‑режим, глобальный хоткей mute/unmute.
-- `micctl.exe` — консольная утилита, которая напрямую включает/выключает микрофон.
+Проект состоит из двух утилит:
 
-Проект рассчитан на геймеров: быстрое управление войс-чатом, PTT на боковых кнопках мыши или любой клавише клавиатуры.
+- `micplus.exe` — трэй-приложение с иконкой, PTT-режимом и глобальными хоткеями.
+- `micctl.exe` — консольная утилита для мгновенного включения/выключения микрофона.
+
+> English description is available below.
+
+---
 
 ## Возможности
 
-- Режим **PTT** (push-to-talk) через:
+- Режим **push-to-talk (PTT)**:
   - боковые кнопки мыши (MB4/MB5);
-  - любую выбранную клавишу.
-- Глобальный **toggle‑хоткей** (F9/F10 или произвольная комбинация).
+  - любая клавиша клавиатуры.
+- Глобальный **toggle-хоткей**:
+  - F9 / F10 из коробки;
+  - любое пользовательское сочетание (клавиша либо Ctrl/Alt/Shift/Win + клавиша).
 - Индикатор состояния микрофона в трее:
-  - отдельные иконки для включённого/выключенного микрофона.
-- Сохранение настроек в `micplus.ini` (горячие клавиши, язык, PTT‑режим).
-- Два языка интерфейса: **RU / EN**.
+  - отдельные иконки для включённого и выключенного микрофона.
+- Сохранение настроек в `micplus.ini` (горячие клавиши, язык, PTT-режим).
+- Два языка интерфейса: **русский / английский**.
 
-## Установка и запуск
+## Установка
 
-1. Скачайте/скомпилируйте:
-   - `micplus.exe`
-   - `micctl.exe`
+1. Зайдите в раздел [Releases](https://github.com/nivemoon/micplus/releases) и скачайте последний релиз (`micplus.exe` и `micctl.exe`).[page:1]
 2. Поместите оба файла в одну папку.
 3. Запустите `micplus.exe`.
-4. В трее появится иконка MicPlus.
+4. В системном трее появится иконка MicPlus.
+
+Файл `micplus.ini` будет создан автоматически рядом с `micplus.exe`.
 
 ## Использование
 
 - Правый клик по иконке в трее:
-  - выбор PTT‑кнопки (MB4/MB5 или произвольная клавиша);
-  - настройка toggle‑хоткея (F9/F10/Custom);
-  - переключение PTT‑режима;
-  - смена языка;
+  - выбор PTT-кнопки (MB4 / MB5 или кастомная клавиша);
+  - выбор toggle-хоткея (F9 / F10 / Custom);
+  - включение/выключение PTT-режима;
+  - смена языка интерфейса;
   - выход из приложения.
-- При зажатой PTT‑кнопке микрофон включается, при отпускании — выключается.
-- Toggle‑хоткей принудительно включает/выключает микрофон.
+- При зажатой PTT-кнопке микрофон включается, при отпускании — выключается.
+- Toggle-хоткей принудительно включает или выключает микрофон вне зависимости от PTT.
 
-Настройки автоматически сохраняются в `micplus.ini` рядом с `micplus.exe`.
+## Сборка из исходников
 
-## Сборка (MinGW / gcc)
+Исходники и ресурсы лежат в каталогах `src/` и `res/`.[page:1]
 
-Пример команд для сборки из исходников:
+Требуется MinGW-w64 или другой компилятор с поддержкой WinAPI.
+
+Пример сборки (из корня репозитория):
 
 ```bash
-windres micplus.rc -O coff -o micplus.res
-gcc micplus.c micplus.res -o micplus.exe -mwindows -lole32 -luuid -luser32 -lshell32
+windres res/micplus.rc -O coff -o micplus.res
+gcc src/micplus.c micplus.res -o micplus.exe -mwindows -lole32 -luuid -luser32 -lshell32
 ```
 
-Требуется установленный MinGW-w64 и стандартные WinAPI-библиотеки.
+`micctl.exe` собирается отдельно из `src/micctl.c` аналогичным образом.
 
-`micctl.exe` собирается отдельно (утилита управления микрофоном через WinAPI / Core Audio).
+## Структура репозитория
 
-## Структура файлов
+```text
+src/        # исходники (micplus.c, micctl.c)
+res/        # ресурсы (micplus.rc, .ico)
+README.md
+LICENSE
+```
 
-В рабочей папке достаточно:
+Готовые бинарники (`micplus.exe`, `micctl.exe`) публикуются в разделе Releases и в репозитории по умолчанию не хранятся.[page:1]
 
-- `micplus.exe` — трэй-приложение.
-- `micctl.exe` — утилита управления микрофоном.
-- `micplus.ini` — конфиг (создаётся автоматически).
+## Лицензия
 
-Исходники/ресурсы (нужны только для сборки):
+Проект распространяется по лицензии MIT. См. файл [`LICENSE`](LICENSE).[page:1]
 
-- `micplus.c`
-- `micplus.rc`
-- `pttffn.ico`, `micplus_on.ico`, `micplus_off.ico`
+---
+
+## English summary
+
+**MicPlus** is a small Windows tray utility that gives you global control over your microphone: **mute / unmute / push-to-talk (PTT)**.
+
+It consists of two parts:
+
+- `micplus.exe` — tray app with an icon, PTT mode and global hotkeys.
+- `micctl.exe` — console helper that directly toggles the microphone state.
+
+### Features
+
+- **Push-to-talk (PTT)**:
+  - mouse side buttons (MB4 / MB5);
+  - any keyboard key.
+- **Toggle hotkey**:
+  - F9 / F10 by default;
+  - any custom combination (key or Ctrl/Alt/Shift/Win + key).
+- Tray icon indicates microphone state:
+  - separate icons for mic on / mic off.
+- Settings saved to `micplus.ini` (hotkeys, language, PTT mode).
+- UI languages: **Russian / English**.
+
+### Installation
+
+1. Download the latest release from [Releases](https://github.com/nivemoon/micplus/releases).[page:1]
+2. Put `micplus.exe` and `micctl.exe` into the same folder.
+3. Run `micplus.exe` — a MicPlus icon will appear in the system tray.
+4. Configure hotkeys and PTT mode from the tray context menu.
+
+### Build
+
+See the Russian section above for a MinGW / gcc build example from `src/` and `res/` folders.[page:1]
