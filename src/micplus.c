@@ -11,51 +11,53 @@
 
 // IDs для основного меню
 #define ID_TRAY_PTT_MODE      2001
-#define ID_TRAY_MIC_MUTE      2002
-#define ID_TRAY_MIC_UNMUTE    2003
-#define ID_TRAY_MIC_TOGGLE    2004
+#define ID_TRAY_MIC_TOGGLE    2002   // Микрофон
+#define ID_TRAY_SOUND_TOGGLE  2003   // Звук системы
 #define ID_TRAY_EXIT          2005
 
-// IDs для подменю Hotkeys (PTT + Toggle)
-#define ID_HK_PTT_MB4         2100
+// IDs для подменю Hotkeys
 #define ID_HK_PTT_MB5         2101
 #define ID_HK_PTT_CUSTOM      2102
-#define ID_HK_TOGGLE_F9       2103
-#define ID_HK_TOGGLE_F10      2104
-#define ID_HK_TOGGLE_CUSTOM   2105
+
+#define ID_HK_MIC_F10         2110   // Микрофон: F10
+#define ID_HK_MIC_CUSTOM      2111   // Микрофон: Custom
+
+#define ID_HK_SOUND_DEFAULT   2120   // Sound: Alt+F9
+#define ID_HK_SOUND_CUSTOM    2121   // Sound: Custom
 
 // IDs для подменю Language
 #define ID_LANG_EN            2200
 #define ID_LANG_RU            2201
 
 // ID для RegisterHotKey
-#define HOTKEY_ID_TOGGLE      1   // глобальный toggle
+#define HOTKEY_ID_TOGGLE      1   // микрофон
+#define HOTKEY_ID_SOUND       2   // звук
 
 HINSTANCE g_hInst;
 HHOOK g_hMouseHook;
 HHOOK g_hKeyboardHook;
 NOTIFYICONDATAA g_nid;
 
-// главное скрытое окно (только для сообщений)
 HWND g_hMainWnd = NULL;
 
-int g_muted = 0;          // 0 = mic ON, 1 = mic OFF
-int g_pttMode = 0;        // 1 = PTT mode включён
+int g_muted      = 0;   // 0 = mic ON, 1 = mic OFF
+int g_pttMode    = 0;   // 1 = PTT mode включён
+int g_soundMuted = 0;   // локальный флаг для звука
 
-HICON g_hIconOn = NULL;
+HICON g_hIconOn  = NULL;
 HICON g_hIconOff = NULL;
 
 char g_iniPath[MAX_PATH];
 
-// Toggle hotkey
+// Микрофон: toggle hotkey
 UINT g_vkToggle  = VK_F10;
 UINT g_modToggle = 0;
-int  g_toggleCustomSet = 0; // 0 - стандарт (F9/F10), 1 - своё
+int  g_toggleCustomSet = 0;
 
 // PTT: мышь или кастомная клавиша
 UINT g_pttButton    = XBUTTON2;  // по умолчанию MButton5
-UINT g_vkPttCustom  = 0;         // 0 = нет кастомного PTT
-int  g_pttKeyDown   = 0;         // флаг: кастомная PTT-клавиша сейчас зажата
+UINT g_vkPttCustom  = 0;
+int  g_pttKeyDown   = 0;
 
 // Язык
 typedef enum {
@@ -65,15 +67,21 @@ typedef enum {
 
 APP_LANG g_lang = LANG_EN;
 
-// Подписи для меню
-char g_labelMicMute[64];
-char g_labelMicUnmute[64];
-char g_labelMicToggle[64];
-char g_labelToggleCustom[64];
-char g_labelPttCustom[64];
+// Подписи
+char g_labelMicToggle[64];     // "Микрофон (…)" / "Microphone (…)"
+char g_labelPttCustom[64];     // "Рация: Настроить" / "PTT: Custom…"
+char g_labelSoundToggle[64];   // "Звук системы (…)" / "System sound (…)"
+char g_labelPttMode[64];       // "Режим рации (…)" / "PTT mode (…)"
 
-// прототип, чтобы линкер не ругался
+
+// Звук (master volume mute)
+UINT g_vkSoundToggle  = VK_F9;
+UINT g_modSoundToggle = MOD_ALT;   // Alt+F9
+
+// прототипы
 void RemoveTrayIcon(void);
+void SetMicState(int mute);
+void UpdateTooltip(void);
 
 // ---------- INI ----------
 
@@ -103,7 +111,7 @@ void LoadSettings(void)
 
     GetPrivateProfileStringA("General", "PTTButton", "2", buf, sizeof(buf), g_iniPath);
     int ptt = atoi(buf);
-    g_pttButton = (ptt == 1) ? XBUTTON1 : XBUTTON2;
+    g_pttButton = (ptt == 1) ? XBUTTON1 : XBUTTON2; // но по умолчанию всё равно 5
 
     GetPrivateProfileStringA("General", "PttCustomVK", "0", buf, sizeof(buf), g_iniPath);
     g_vkPttCustom = (UINT)atoi(buf);
@@ -114,6 +122,14 @@ void LoadSettings(void)
         g_lang = LANG_RU;
     else
         g_lang = LANG_EN;
+
+    // Звук: читаем хоткей
+    GetPrivateProfileStringA("General", "SoundToggleVK", "120", buf, sizeof(buf), g_iniPath); // VK_F9 = 120
+    g_vkSoundToggle = (UINT)atoi(buf);
+    if (g_vkSoundToggle == 0) g_vkSoundToggle = VK_F9;
+
+    GetPrivateProfileStringA("General", "SoundToggleMods", "1", buf, sizeof(buf), g_iniPath); // MOD_ALT = 1
+    g_modSoundToggle = (UINT)atoi(buf);
 }
 
 void SaveSettings(void)
@@ -139,6 +155,12 @@ void SaveSettings(void)
     WritePrivateProfileStringA("General", "Language",
                                (g_lang == LANG_RU) ? "ru" : "en",
                                g_iniPath);
+
+    wsprintfA(buf, "%u", g_vkSoundToggle);
+    WritePrivateProfileStringA("General", "SoundToggleVK", buf, g_iniPath);
+
+    wsprintfA(buf, "%u", g_modSoundToggle);
+    WritePrivateProfileStringA("General", "SoundToggleMods", buf, g_iniPath);
 }
 
 // ---------- Локализация ----------
@@ -146,28 +168,32 @@ void SaveSettings(void)
 const char* T(const char* id)
 {
     if (g_lang == LANG_RU) {
-        if (lstrcmpA(id, "MENU_PTT_MB4") == 0)       return "Рация: Кнопка мыши 4";
         if (lstrcmpA(id, "MENU_PTT_MB5") == 0)       return "Рация: Кнопка мыши 5";
-        if (lstrcmpA(id, "MENU_PTT_CUSTOM") == 0)    return "Назначить клавишу...";
-        if (lstrcmpA(id, "MENU_TOGGLE_F9") == 0)     return "Переключение: F9";
-        if (lstrcmpA(id, "MENU_TOGGLE_F10") == 0)    return "Переключение: F10";
-        if (lstrcmpA(id, "MENU_TOGGLE_CUSTOM") == 0) return "Назначить...";
-        if (lstrcmpA(id, "MENU_PTT_MODE") == 0)      return "Режим рации (PTT)";
+        if (lstrcmpA(id, "MENU_PTT_CUSTOM") == 0)    return "Рация: Настроить";
         if (lstrcmpA(id, "MENU_MIC") == 0)           return "Микрофон";
+        if (lstrcmpA(id, "MENU_SOUND") == 0)         return "Звук системы";
+        if (lstrcmpA(id, "MENU_PTT_MODE") == 0)      return "Режим рации";
         if (lstrcmpA(id, "MENU_HOTKEYS") == 0)       return "Горячие клавиши";
         if (lstrcmpA(id, "MENU_LANGUAGE") == 0)      return "Язык";
         if (lstrcmpA(id, "MENU_EXIT") == 0)          return "Выход";
 
         if (lstrcmpA(id, "MSG_TOGGLE_SELECT_TITLE") == 0)
-            return "MicPlus - Выбор хоткея Toggle";
+            return "MicPlus - Хоткей микрофона";
         if (lstrcmpA(id, "MSG_TOGGLE_SELECT_TEXT") == 0)
             return "Закройте это окно, затем нажмите нужное сочетание (модификаторы + клавиша).\n"
                    "ESC в основном окне отменяет выбор.";
+        if (lstrcmpA(id, "MSG_SOUND_SELECT_TITLE") == 0)
+            return "MicPlus - Хоткей звука системы";
+        if (lstrcmpA(id, "MSG_SOUND_SELECT_TEXT") == 0)
+            return "Закройте это окно, затем нажмите нужное сочетание (модификаторы + клавиша) для звука.\n"
+                   "ESC в основном окне отменяет выбор.";
+
         if (lstrcmpA(id, "MSG_PTT_SELECT_TITLE") == 0)
             return "MicPlus - Выбор PTT-клавиши";
         if (lstrcmpA(id, "MSG_PTT_SELECT_TEXT") == 0)
             return "Закройте это окно, затем нажмите нужную PTT-клавишу.\n"
                    "ESC в основном окне отменяет выбор.";
+
         if (lstrcmpA(id, "MSG_SELECTED_HK") == 0)
             return "Выбран хоткей: %s";
         if (lstrcmpA(id, "MSG_SELECTED_PTT") == 0)
@@ -179,35 +205,39 @@ const char* T(const char* id)
         if (lstrcmpA(id, "MSG_ERR_HOOK") == 0)
             return "Не удалось установить низкоуровневые хуки.";
         if (lstrcmpA(id, "MSG_ERR_HOTKEY") == 0)
-            return "Не удалось зарегистрировать хоткей Toggle.";
+            return "Не удалось зарегистрировать хоткей.";
 
         if (lstrcmpA(id, "TOOLTIP_FORMAT_ON") == 0)
-            return "MicPlus: MIC ON (PTT %s, Toggle %s)";
+            return "MicPlus: ВКЛ (Рация %s, Режим %s, Звук %s)";
         if (lstrcmpA(id, "TOOLTIP_FORMAT_OFF") == 0)
-            return "MicPlus: MIC OFF (PTT %s, Toggle %s)";
+            return "MicPlus: ВЫКЛ (Рация %s, Режим %s, Звук %s)";
     } else {
-        if (lstrcmpA(id, "MENU_PTT_MB4") == 0)       return "PTT: MButton4";
         if (lstrcmpA(id, "MENU_PTT_MB5") == 0)       return "PTT: MButton5";
-        if (lstrcmpA(id, "MENU_PTT_CUSTOM") == 0)    return "PTT: Custom Key";
-        if (lstrcmpA(id, "MENU_TOGGLE_F9") == 0)     return "Toggle: F9";
-        if (lstrcmpA(id, "MENU_TOGGLE_F10") == 0)    return "Toggle: F10";
-        if (lstrcmpA(id, "MENU_TOGGLE_CUSTOM") == 0) return "Toggle: Custom";
-        if (lstrcmpA(id, "MENU_PTT_MODE") == 0)      return "PTT mode";
+        if (lstrcmpA(id, "MENU_PTT_CUSTOM") == 0)    return "PTT: Custom Key...";
         if (lstrcmpA(id, "MENU_MIC") == 0)           return "Microphone";
+        if (lstrcmpA(id, "MENU_SOUND") == 0)         return "System sound";
+        if (lstrcmpA(id, "MENU_PTT_MODE") == 0)      return "PTT mode";
         if (lstrcmpA(id, "MENU_HOTKEYS") == 0)       return "Hotkeys";
         if (lstrcmpA(id, "MENU_LANGUAGE") == 0)      return "Language";
         if (lstrcmpA(id, "MENU_EXIT") == 0)          return "Exit";
 
         if (lstrcmpA(id, "MSG_TOGGLE_SELECT_TITLE") == 0)
-            return "MicPlus - Select Toggle hotkey";
+            return "MicPlus - Mic hotkey";
         if (lstrcmpA(id, "MSG_TOGGLE_SELECT_TEXT") == 0)
-            return "Close this window, then press the desired hotkey (modifiers + key) in the main window.\n"
+            return "Close this window, then press modifiers+key in the main window.\n"
                    "Press Esc in the main window to cancel.";
+        if (lstrcmpA(id, "MSG_SOUND_SELECT_TITLE") == 0)
+            return "MicPlus - System sound hotkey";
+        if (lstrcmpA(id, "MSG_SOUND_SELECT_TEXT") == 0)
+            return "Close this window, then press modifiers+key for sound.\n"
+                   "Press Esc in the main window to cancel.";
+
         if (lstrcmpA(id, "MSG_PTT_SELECT_TITLE") == 0)
             return "MicPlus - Select PTT key";
         if (lstrcmpA(id, "MSG_PTT_SELECT_TEXT") == 0)
-            return "Close this window, then press the desired PTT key in the main window.\n"
+            return "Close this window, then press the desired PTT key.\n"
                    "Press Esc in the main window to cancel.";
+
         if (lstrcmpA(id, "MSG_SELECTED_HK") == 0)
             return "Selected hotkey: %s";
         if (lstrcmpA(id, "MSG_SELECTED_PTT") == 0)
@@ -219,18 +249,18 @@ const char* T(const char* id)
         if (lstrcmpA(id, "MSG_ERR_HOOK") == 0)
             return "Failed to set low-level hooks.";
         if (lstrcmpA(id, "MSG_ERR_HOTKEY") == 0)
-            return "Failed to register toggle hotkey.";
+            return "Failed to register hotkey.";
 
         if (lstrcmpA(id, "TOOLTIP_FORMAT_ON") == 0)
-            return "MicPlus: MIC ON (PTT %s, Toggle %s)";
+            return "MicPlus: ON (PTT %s, Mode %s, Sound %s)";
         if (lstrcmpA(id, "TOOLTIP_FORMAT_OFF") == 0)
-            return "MicPlus: MIC OFF (PTT %s, Toggle %s)";
+            return "MicPlus: OFF (PTT %s, Mode %s, Sound %s)";
     }
 
     return id;
 }
 
-// ---------- Вспомогательные функции ----------
+// ---------- Вспомогательные ----------
 
 void RunMicCtl(int mute)
 {
@@ -292,49 +322,27 @@ void BuildHotkeyName(UINT mods, UINT vk, char *out, int outSize)
     lstrcpynA(out, buf, outSize);
 }
 
-void UpdateMicMenuLabels(void)
+void UpdateMicLabel(void)
 {
     char hkName[64];
     BuildHotkeyName(g_modToggle, g_vkToggle, hkName, sizeof(hkName));
 
     if (g_lang == LANG_RU) {
-        wsprintfA(g_labelMicMute,   "Выключить    (%s)", hkName);
-        lstrcpyA (g_labelMicUnmute, "Включить");
-        wsprintfA(g_labelMicToggle, "Переключение (%s)", hkName);
+        wsprintfA(g_labelMicToggle, "Микрофон (%s)", hkName);
     } else {
-        wsprintfA(g_labelMicMute,   "Mute mic (%s)", hkName);
-        lstrcpyA (g_labelMicUnmute, "Unmute mic");
-        wsprintfA(g_labelMicToggle, "Toggle mic (%s)", hkName);
+        wsprintfA(g_labelMicToggle, "Microphone (%s)", hkName);
     }
 }
 
-void UpdateToggleCustomLabel(void)
+void UpdateSoundLabel(void)
 {
-    if (g_vkToggle == 0) {
-        if (g_lang == LANG_RU) {
-            lstrcpyA(g_labelToggleCustom, "Своё значение");
-        } else {
-            lstrcpyA(g_labelToggleCustom, "Custom value");
-        }
-        return;
-    }
-
-    if (!g_toggleCustomSet) {
-        if (g_lang == LANG_RU) {
-            lstrcpyA(g_labelToggleCustom, "Назначить...");
-        } else {
-            lstrcpyA(g_labelToggleCustom, "Custom key...");
-        }
-        return;
-    }
-
     char hkName[64];
-    BuildHotkeyName(g_modToggle, g_vkToggle, hkName, sizeof(hkName));
+    BuildHotkeyName(g_modSoundToggle, g_vkSoundToggle, hkName, sizeof(hkName));
 
     if (g_lang == LANG_RU) {
-        wsprintfA(g_labelToggleCustom, "Переключение: %s", hkName);
+        wsprintfA(g_labelSoundToggle, "Звук системы (%s)", hkName);
     } else {
-        wsprintfA(g_labelToggleCustom, "Toggle: %s", hkName);
+        wsprintfA(g_labelSoundToggle, "System sound (%s)", hkName);
     }
 }
 
@@ -355,14 +363,38 @@ void UpdatePttCustomLabel(void)
     }
 }
 
+void UpdatePttModeLabel(void)
+{
+    char hkName[64];
+
+    if (g_vkPttCustom != 0) {
+        GetKeyDisplayName(g_vkPttCustom, hkName, sizeof(hkName));
+    } else {
+        if (g_lang == LANG_RU) {
+            lstrcpynA(hkName, (g_pttButton == XBUTTON1) ? "Мышь 4" : "Мышь 5", sizeof(hkName));
+        } else {
+            lstrcpynA(hkName, (g_pttButton == XBUTTON1) ? "MButton4" : "MButton5", sizeof(hkName));
+        }
+    }
+
+    if (g_lang == LANG_RU) {
+        wsprintfA(g_labelPttMode, "Режим рации (%s)", hkName);
+    } else {
+        wsprintfA(g_labelPttMode, "PTT mode (%s)", hkName);
+    }
+}
+
 void UpdateTooltip(void)
 {
     if (!g_nid.hWnd) return;
 
     g_nid.uFlags = NIF_ICON | NIF_TIP;
 
-    char hkName[64];
-    BuildHotkeyName(g_modToggle, g_vkToggle, hkName, sizeof(hkName));
+    char micName[64];
+    BuildHotkeyName(g_modToggle, g_vkToggle, micName, sizeof(micName));
+
+    char soundName[64];
+    BuildHotkeyName(g_modSoundToggle, g_vkSoundToggle, soundName, sizeof(soundName));
 
     const char *pttName;
     static char pttBuf[32];
@@ -371,15 +403,19 @@ void UpdateTooltip(void)
         GetKeyDisplayName(g_vkPttCustom, pttBuf, sizeof(pttBuf));
         pttName = pttBuf;
     } else {
-        pttName = (g_pttButton == XBUTTON1) ? "MButton4" : "MButton5";
+        if (g_lang == LANG_RU) {
+            pttName = (g_pttButton == XBUTTON1) ? "Мышь 4" : "Мышь 5";
+        } else {
+            pttName = (g_pttButton == XBUTTON1) ? "MButton4" : "MButton5";
+        }
     }
 
     if (g_muted) {
         g_nid.hIcon = g_hIconOff;
-        wsprintfA(g_nid.szTip, T("TOOLTIP_FORMAT_OFF"), pttName, hkName);
+        wsprintfA(g_nid.szTip, T("TOOLTIP_FORMAT_OFF"), pttName, micName, soundName);
     } else {
         g_nid.hIcon = g_hIconOn;
-        wsprintfA(g_nid.szTip, T("TOOLTIP_FORMAT_ON"), pttName, hkName);
+        wsprintfA(g_nid.szTip, T("TOOLTIP_FORMAT_ON"), pttName, micName, soundName);
     }
 
     Shell_NotifyIconA(NIM_MODIFY, &g_nid);
@@ -396,6 +432,17 @@ void ToggleMic(void)
 {
     SetMicState(!g_muted);
 }
+
+// --- Звук: системный mute через APPCOMMAND_VOLUME_MUTE
+
+void ToggleSystemSound(void)
+{
+    SendMessageA(GetForegroundWindow(), WM_APPCOMMAND, 0, MAKELPARAM(0, APPCOMMAND_VOLUME_MUTE));
+    g_soundMuted = !g_soundMuted;
+    UpdateTooltip();
+}
+
+// ---------- Иконки / трэй ----------
 
 void LoadIcons(void)
 {
@@ -431,9 +478,10 @@ void AddTrayIcon(HWND hWnd)
     g_nid.uCallbackMessage = WM_APP_TRAY;
 
     LoadIcons();
-    UpdateMicMenuLabels();
-    UpdateToggleCustomLabel();
+    UpdateMicLabel();
+    UpdateSoundLabel();
     UpdatePttCustomLabel();
+    UpdatePttModeLabel();
 
     g_nid.hIcon = g_muted ? g_hIconOff : g_hIconOn;
     lstrcpyA(g_nid.szTip, "MicPlus");
@@ -451,11 +499,12 @@ void RemoveTrayIcon(void)
 
 // ---------- Захват хоткеев ----------
 
-BOOL CaptureToggleHotkey(HWND hWnd, UINT *pMods, UINT *pVk)
+BOOL CaptureHotkeyGeneric(HWND hWnd, const char *textId, const char *titleId,
+                          UINT *pMods, UINT *pVk)
 {
     MessageBoxA(hWnd,
-                T("MSG_TOGGLE_SELECT_TEXT"),
-                T("MSG_TOGGLE_SELECT_TITLE"),
+                T(textId),
+                T(titleId),
                 MB_OK | MB_ICONINFORMATION);
 
     UINT mods = 0;
@@ -557,12 +606,20 @@ BOOL CapturePttKey(HWND hWnd, UINT *pVk)
 
 // ---------- Hotkeys: регистрация ----------
 
-void ReRegisterToggleHotkey(HWND hWnd)
+void ReRegisterMicHotkey(HWND hWnd)
 {
     UnregisterHotKey(hWnd, HOTKEY_ID_TOGGLE);
     RegisterHotKey(hWnd, HOTKEY_ID_TOGGLE, g_modToggle, g_vkToggle);
-    UpdateMicMenuLabels();
-    UpdateToggleCustomLabel();
+    UpdateMicLabel();
+    UpdateTooltip();
+    SaveSettings();
+}
+
+void ReRegisterSoundHotkey(HWND hWnd)
+{
+    UnregisterHotKey(hWnd, HOTKEY_ID_SOUND);
+    RegisterHotKey(hWnd, HOTKEY_ID_SOUND, g_modSoundToggle, g_vkSoundToggle);
+    UpdateSoundLabel();
     UpdateTooltip();
     SaveSettings();
 }
@@ -577,51 +634,69 @@ void ShowTrayMenu(HWND hWnd)
     HMENU hMenu = CreatePopupMenu();
     if (!hMenu) return;
 
-    HMENU hMicMenu = CreatePopupMenu();
     HMENU hHotkeysMenu = CreatePopupMenu();
     HMENU hLangMenu = CreatePopupMenu();
 
+    // PTT mode с отображением клавиши
+    UpdatePttModeLabel();
     InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_STRING |
                          (g_pttMode ? MF_CHECKED : 0),
-                ID_TRAY_PTT_MODE, T("MENU_PTT_MODE"));
+                ID_TRAY_PTT_MODE, g_labelPttMode);
 
     InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
 
-    UINT mb4Flags      = MF_STRING | ((g_pttButton == XBUTTON1 && g_vkPttCustom == 0) ? MF_CHECKED : 0);
+    // Mic toggle
+    InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_STRING |
+                         (!g_muted ? MF_CHECKED : 0),
+                ID_TRAY_MIC_TOGGLE, g_labelMicToggle);
+
+    // Sound toggle
+    InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_STRING |
+                         (!g_soundMuted ? MF_CHECKED : 0),
+                ID_TRAY_SOUND_TOGGLE, g_labelSoundToggle);
+
+    InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+
+    // Подменю Hotkeys
+
     UINT mb5Flags      = MF_STRING | ((g_pttButton == XBUTTON2 && g_vkPttCustom == 0) ? MF_CHECKED : 0);
     UINT customPttFlag = MF_STRING | ((g_vkPttCustom != 0) ? MF_CHECKED : 0);
 
-    AppendMenuA(hHotkeysMenu, mb4Flags, ID_HK_PTT_MB4, T("MENU_PTT_MB4"));
     AppendMenuA(hHotkeysMenu, mb5Flags, ID_HK_PTT_MB5, T("MENU_PTT_MB5"));
     AppendMenuA(hHotkeysMenu, customPttFlag, ID_HK_PTT_CUSTOM, g_labelPttCustom);
 
     AppendMenuA(hHotkeysMenu, MF_SEPARATOR, 0, NULL);
 
-    UINT f9Flags      = MF_STRING;
-    UINT f10Flags     = MF_STRING;
-    UINT customFlags  = MF_STRING;
+    // Mic hotkeys
+    UINT micF10Flags    = MF_STRING;
+    UINT micCustomFlags = MF_STRING;
+    if (g_modToggle == 0 && g_vkToggle == VK_F10)
+        micF10Flags |= MF_CHECKED;
+    else
+        micCustomFlags |= MF_CHECKED;
 
-    if (g_modToggle == 0 && g_vkToggle == VK_F9) {
-        f9Flags |= MF_CHECKED;
-    } else if (g_modToggle == 0 && g_vkToggle == VK_F10) {
-        f10Flags |= MF_CHECKED;
-    } else {
-        customFlags |= MF_CHECKED;
-    }
+    AppendMenuA(hHotkeysMenu, micF10Flags, ID_HK_MIC_F10,
+                (g_lang == LANG_RU) ? "Микрофон: F10" : "Mic: F10");
+    AppendMenuA(hHotkeysMenu, micCustomFlags, ID_HK_MIC_CUSTOM,
+                (g_lang == LANG_RU) ? "Микрофон: Настроить" : "Mic: Custom...");
 
-    AppendMenuA(hHotkeysMenu, f9Flags,  ID_HK_TOGGLE_F9,  T("MENU_TOGGLE_F9"));
-    AppendMenuA(hHotkeysMenu, f10Flags, ID_HK_TOGGLE_F10, T("MENU_TOGGLE_F10"));
-    AppendMenuA(hHotkeysMenu, customFlags,
-                ID_HK_TOGGLE_CUSTOM, g_labelToggleCustom);
+    AppendMenuA(hHotkeysMenu, MF_SEPARATOR, 0, NULL);
+
+    // Sound hotkeys (EN: просто Sound)
+    UINT sndDefFlags    = MF_STRING;
+    UINT sndCustomFlags = MF_STRING;
+    if (g_modSoundToggle == MOD_ALT && g_vkSoundToggle == VK_F9)
+        sndDefFlags |= MF_CHECKED;
+    else
+        sndCustomFlags |= MF_CHECKED;
+
+    AppendMenuA(hHotkeysMenu, sndDefFlags, ID_HK_SOUND_DEFAULT,
+                (g_lang == LANG_RU) ? "Звук системы: Alt+F9" : "Sound: Alt+F9");
+    AppendMenuA(hHotkeysMenu, sndCustomFlags, ID_HK_SOUND_CUSTOM,
+                (g_lang == LANG_RU) ? "Звук системы: Настроить" : "Sound: Custom...");
 
     InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_POPUP,
                 (UINT_PTR)hHotkeysMenu, T("MENU_HOTKEYS"));
-
-    AppendMenuA(hMicMenu, MF_STRING, ID_TRAY_MIC_MUTE,   g_labelMicMute);
-    AppendMenuA(hMicMenu, MF_STRING, ID_TRAY_MIC_UNMUTE, g_labelMicUnmute);
-    AppendMenuA(hMicMenu, MF_STRING, ID_TRAY_MIC_TOGGLE, g_labelMicToggle);
-    InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_POPUP,
-                (UINT_PTR)hMicMenu, T("MENU_MIC"));
 
     InsertMenuA(hMenu, -1, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
 
@@ -683,7 +758,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
 }
 
-// ---------- Окно (невидимое, только для сообщений) ----------
+// ---------- Окно ----------
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -702,27 +777,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 SetMicState(1);
             }
             SaveSettings();
-            break;
-
-        case ID_TRAY_MIC_MUTE:
-            SetMicState(1);
-            break;
-
-        case ID_TRAY_MIC_UNMUTE:
-            SetMicState(0);
+            UpdatePttModeLabel();
+            UpdateTooltip();
             break;
 
         case ID_TRAY_MIC_TOGGLE:
             ToggleMic();
             break;
 
-        case ID_HK_PTT_MB4:
-            g_pttButton   = XBUTTON1;
-            g_vkPttCustom = 0;
-            g_pttKeyDown  = 0;
-            SaveSettings();
-            UpdatePttCustomLabel();
-            UpdateTooltip();
+        case ID_TRAY_SOUND_TOGGLE:
+            ToggleSystemSound();
             break;
 
         case ID_HK_PTT_MB5:
@@ -731,6 +795,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_pttKeyDown  = 0;
             SaveSettings();
             UpdatePttCustomLabel();
+            UpdatePttModeLabel();
             UpdateTooltip();
             break;
 
@@ -742,33 +807,46 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_pttKeyDown  = 0;
                 SaveSettings();
                 UpdatePttCustomLabel();
+                UpdatePttModeLabel();
                 UpdateTooltip();
             }
             break;
         }
 
-        case ID_HK_TOGGLE_F9:
-            g_modToggle = 0;
-            g_vkToggle  = VK_F9;
-            g_toggleCustomSet = 0;
-            ReRegisterToggleHotkey(hWnd);
-            break;
-
-        case ID_HK_TOGGLE_F10:
+        case ID_HK_MIC_F10:
             g_modToggle = 0;
             g_vkToggle  = VK_F10;
             g_toggleCustomSet = 0;
-            ReRegisterToggleHotkey(hWnd);
+            ReRegisterMicHotkey(hWnd);
             break;
 
-        case ID_HK_TOGGLE_CUSTOM:
+        case ID_HK_MIC_CUSTOM:
         {
             UINT mods = 0, vk = 0;
-            if (CaptureToggleHotkey(hWnd, &mods, &vk)) {
+            if (CaptureHotkeyGeneric(hWnd, "MSG_TOGGLE_SELECT_TEXT", "MSG_TOGGLE_SELECT_TITLE",
+                                     &mods, &vk)) {
                 g_modToggle = mods;
                 g_vkToggle  = vk;
                 g_toggleCustomSet = 1;
-                ReRegisterToggleHotkey(hWnd);
+                ReRegisterMicHotkey(hWnd);
+            }
+            break;
+        }
+
+        case ID_HK_SOUND_DEFAULT:
+            g_modSoundToggle = MOD_ALT;
+            g_vkSoundToggle  = VK_F9;
+            ReRegisterSoundHotkey(hWnd);
+            break;
+
+        case ID_HK_SOUND_CUSTOM:
+        {
+            UINT mods = 0, vk = 0;
+            if (CaptureHotkeyGeneric(hWnd, "MSG_SOUND_SELECT_TEXT", "MSG_SOUND_SELECT_TITLE",
+                                     &mods, &vk)) {
+                g_modSoundToggle = mods;
+                g_vkSoundToggle  = vk;
+                ReRegisterSoundHotkey(hWnd);
             }
             break;
         }
@@ -776,18 +854,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case ID_LANG_EN:
             g_lang = LANG_EN;
             SaveSettings();
-            UpdateMicMenuLabels();
-            UpdateToggleCustomLabel();
+            UpdateMicLabel();
+            UpdateSoundLabel();
             UpdatePttCustomLabel();
+            UpdatePttModeLabel();
             UpdateTooltip();
             break;
 
         case ID_LANG_RU:
             g_lang = LANG_RU;
             SaveSettings();
-            UpdateMicMenuLabels();
-            UpdateToggleCustomLabel();
+            UpdateMicLabel();
+            UpdateSoundLabel();
             UpdatePttCustomLabel();
+            UpdatePttModeLabel();
             UpdateTooltip();
             break;
 
@@ -800,11 +880,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_HOTKEY:
         if (wParam == HOTKEY_ID_TOGGLE) {
             ToggleMic();
+        } else if (wParam == HOTKEY_ID_SOUND) {
+            ToggleSystemSound();
         }
         break;
 
     case WM_DESTROY:
-        // выходим только через ID_TRAY_EXIT
         break;
     }
     return DefWindowProcA(hWnd, msg, wParam, lParam);
@@ -815,11 +896,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                    LPSTR lpCmdLine, int nShowCmd)
 {
+    HANDLE hMutex = CreateMutexA(
+        NULL,
+        TRUE,
+        "MicPlusSingleInstanceMutex"
+    );
+
+    if (hMutex == NULL) {
+    } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(hMutex);
+        return 0;
+    }
+
     g_hInst = hInstance;
 
     LoadSettings();
 
-    if (g_modToggle == 0 && (g_vkToggle == VK_F9 || g_vkToggle == VK_F10)) {
+    if (g_modToggle == 0 && (g_vkToggle == VK_F10)) {
         g_toggleCustomSet = 0;
     } else {
         g_toggleCustomSet = 1;
@@ -827,6 +920,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     const char *CLASS_NAME = "MICPLUS_CLASS";
 
+    // Регистрируем класс как обычно (на случай, если Windows всё равно хочет класс),
+    // но окно создаём как message-only.
     WNDCLASSEXA wc = { 0 };
     wc.cbSize        = sizeof(wc);
     wc.lpfnWndProc   = WndProc;
@@ -837,26 +932,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = NULL;
 
-    if (!RegisterClassExA(&wc)) {
-        return 1;
-    }
+    RegisterClassExA(&wc);
 
-    // создаём скрытое служебное окно
+    // Message-only окно: вообще не отображается и не имеет taskbar-кнопки
     g_hMainWnd = CreateWindowExA(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, // не в Alt+Tab, не в таскбаре
+        0,
         CLASS_NAME,
         "MicPlusHidden",
-        WS_POPUP,                             // без рамок, без WS_VISIBLE
-        -100, -100, 0, 0,
-        NULL, NULL, hInstance, NULL
+        0,
+        0, 0, 0, 0,
+        HWND_MESSAGE,   // ключевой момент
+        NULL, hInstance, NULL
     );
     if (!g_hMainWnd) {
+        if (hMutex) {
+            ReleaseMutex(hMutex);
+            CloseHandle(hMutex);
+        }
         return 1;
     }
-
-    ShowWindow(g_hMainWnd, SW_HIDE);
-    SetWindowPos(g_hMainWnd, HWND_BOTTOM, -100, -100, 0, 0,
-                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
 
     AddTrayIcon(g_hMainWnd);
 
@@ -867,12 +961,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         if (g_hMouseHook)    UnhookWindowsHookEx(g_hMouseHook);
         if (g_hKeyboardHook) UnhookWindowsHookEx(g_hKeyboardHook);
         RemoveTrayIcon();
+
+        if (hMutex) {
+            ReleaseMutex(hMutex);
+            CloseHandle(hMutex);
+        }
         return 1;
     }
 
-    if (!RegisterHotKey(g_hMainWnd, HOTKEY_ID_TOGGLE, g_modToggle, g_vkToggle)) {
-        MessageBoxA(NULL, T("MSG_ERR_HOTKEY"), "MicPlus", MB_ICONERROR);
-    }
+    RegisterHotKey(g_hMainWnd, HOTKEY_ID_TOGGLE, g_modToggle, g_vkToggle);
+    RegisterHotKey(g_hMainWnd, HOTKEY_ID_SOUND,  g_modSoundToggle, g_vkSoundToggle);
 
     SetMicState(0);
 
@@ -887,9 +985,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (g_hMouseHook)    UnhookWindowsHookEx(g_hMouseHook);
     if (g_hKeyboardHook) UnhookWindowsHookEx(g_hKeyboardHook);
     UnregisterHotKey(g_hMainWnd, HOTKEY_ID_TOGGLE);
+    UnregisterHotKey(g_hMainWnd, HOTKEY_ID_SOUND);
     RemoveTrayIcon();
 
     SaveSettings();
+
+    if (hMutex) {
+        ReleaseMutex(hMutex);
+        CloseHandle(hMutex);
+    }
 
     return 0;
 }
