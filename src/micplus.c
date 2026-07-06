@@ -3,7 +3,9 @@
 #include <shellapi.h>
 #include <mmsystem.h>   // PlaySoundW
 #include <shlwapi.h>    // PathCombineA (по желанию)
-#include <winreg.h>     // реестр для автозапуска
+#include <shlobj.h>     // SHGetFolderPathA
+#include <objbase.h>    // CoInitialize, CoUninitialize
+#include <shobjidl.h>   // IShellLink, IPersistFile
 
 // ресурсы
 #define IDI_APPICON        101
@@ -69,6 +71,7 @@ HICON g_hIconOffRed    = NULL;
 
 char g_iniPath[MAX_PATH];
 char g_exePath[MAX_PATH];
+char g_startupPath[MAX_PATH]; 
 
 int IsAppLightTheme(void)
 {
@@ -170,6 +173,11 @@ void PlayPTTSound(int start);
 void PlayMicSound(int mute);
 int IsSystemLightTheme(void);
 void AddTrayIcon(HWND hWnd);
+void BuildPaths(void); 
+void BuildStartupPath(void); 
+BOOL CreateStartupShortcut(void);
+void RemoveStartupShortcut(void);
+void SetAutostart(int enable);
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
@@ -177,6 +185,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // ---------- INI ----------
 
+
+void BuildStartupPath(void)
+{
+    // %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
+    char appData[MAX_PATH];
+
+    if (SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appData) != S_OK) {
+        g_startupPath[0] = '\0';
+        return;
+    }
+
+    wsprintfA(g_startupPath, "%s\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", appData);
+}
 
 void BuildPaths(void)
 {
@@ -190,6 +211,7 @@ void BuildPaths(void)
 void LoadSettings(void)
 {
     BuildPaths();
+	BuildStartupPath();
 
     char buf[256];
 
@@ -443,11 +465,65 @@ const char* T(const char* id)
 
 // ---------- Вспомогательные ----------
 
-void RunMicCtl(int mute)
+BOOL CreateStartupShortcut(void)
+{
+    if (g_startupPath[0] == '\0') {
+        BuildStartupPath();
+        if (g_startupPath[0] == '\0')
+            return FALSE;
+    }
+
+    char linkPath[MAX_PATH];
+    wsprintfA(linkPath, "%s\\MicPlus.lnk", g_startupPath);
+
+    // Инициализация COM (если ещё не инициализировано)
+    HRESULT hr = CoInitialize(NULL);
+    BOOL needUninit = SUCCEEDED(hr);
+
+    IShellLinkA *psl = NULL;
+    hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IShellLinkA, (void**)&psl);
+    if (FAILED(hr) || !psl) {
+        if (needUninit) CoUninitialize();
+        return FALSE;
+    }
+
+    // Путь к MicPlus.exe
+    psl->lpVtbl->SetPath(psl, g_exePath);
+    // Рабочая папка — директория exe
+    char exeDir[MAX_PATH];
+    lstrcpyA(exeDir, g_exePath);
+    char *slash = strrchr(exeDir, '\\');
+    if (slash) *slash = '\0';
+    psl->lpVtbl->SetWorkingDirectory(psl, exeDir);
+
+    // Получаем IPersistFile и сохраняем .lnk
+    IPersistFile *ppf = NULL;
+    hr = psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void**)&ppf);
+    if (SUCCEEDED(hr) && ppf) {
+        WCHAR wszLinkPath[MAX_PATH];
+        MultiByteToWideChar(CP_ACP, 0, linkPath, -1, wszLinkPath, MAX_PATH);
+
+        hr = ppf->lpVtbl->Save(ppf, wszLinkPath, TRUE);
+        ppf->lpVtbl->Release(ppf);
+    }
+
+    psl->lpVtbl->Release(psl);
+
+    if (needUninit) CoUninitialize();
+
+    return SUCCEEDED(hr);
+}
+
+BOOL RunMicCtl(int mute)
 {
     char args[4];
     wsprintfA(args, "%d", mute ? 1 : 0);
-    ShellExecuteA(NULL, "open", "micctl.exe", args, NULL, SW_HIDE);
+
+    HINSTANCE hRes = ShellExecuteA(NULL, "open", "micctl.exe", args, NULL, SW_HIDE);
+
+    // ShellExecute возвращает значение <= 32 при ошибке
+    return (INT_PTR)hRes > 32;
 }
 
 // путь к .\sounds\<fileName>
@@ -461,6 +537,19 @@ void BuildSoundPath(const char *fileName, char *out, int outSize)
     char tmp[MAX_PATH];
     wsprintfA(tmp, "%s%s\\%s", baseDir, g_soundsDir, fileName);
     lstrcpynA(out, tmp, outSize);
+}
+
+void RemoveStartupShortcut(void)
+{
+    if (g_startupPath[0] == '\0') {
+        BuildStartupPath();
+        if (g_startupPath[0] == '\0')
+            return;
+    }
+
+    char linkPath[MAX_PATH];
+    wsprintfA(linkPath, "%s\\MicPlus.lnk", g_startupPath);
+    DeleteFileA(linkPath);
 }
 
 void GetKeyDisplayName(UINT vk, char *out, int outSize)
@@ -688,7 +777,11 @@ void PlayMicSound(int mute)
 
 void SetMicStateGlobal(int mute)
 {
-    RunMicCtl(mute);
+    if (!RunMicCtl(mute)) {
+        // micctl не запустился — не меняем состояние и индикатор
+        return;
+    }
+
     g_muted = mute ? 1 : 0;
     UpdateTooltip();
     PlayMicSound(mute);      // микрофонные звуки
@@ -698,7 +791,10 @@ void SetMicStateGlobal(int mute)
 
 void SetMicStatePTT(int mute)
 {
-    RunMicCtl(mute);
+    if (!RunMicCtl(mute)) {
+        return;
+    }
+
     g_muted = mute ? 1 : 0;
     UpdateTooltip();
     UpdateMicLabel();
@@ -976,23 +1072,11 @@ void ReRegisterSoundHotkey(HWND hWnd)
 
 void SetAutostart(int enable)
 {
-    HKEY hKey;
-    LONG res = RegOpenKeyExA(
-        HKEY_CURRENT_USER,
-        "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-        0,
-        KEY_WRITE,
-        &hKey
-    );
-    if (res != ERROR_SUCCESS) return;
-
     if (enable) {
-        RegSetValueExA(hKey, "MicPlus", 0, REG_SZ, (const BYTE*)g_exePath, (DWORD)(lstrlenA(g_exePath) + 1));
+        CreateStartupShortcut();
     } else {
-        RegDeleteValueA(hKey, "MicPlus");
+        RemoveStartupShortcut();
     }
-
-    RegCloseKey(hKey);
 }
 
 // ---------- Меню и обработка ----------
