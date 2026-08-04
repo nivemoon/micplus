@@ -135,3 +135,10 @@ It consists of two parts:
 ### Build
 
 See the Russian section above for a MinGW / gcc build example from `src/` and `res/` folders.
+
+
+---
+
+Developed by **Nivemoon Labs**.
+
+Copyright © 2026 Nivemoon Labs
