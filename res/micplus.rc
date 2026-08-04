@@ -1,9 +1,76 @@
+#pragma code_page(65001)
+
+#include <windows.h>
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,4,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+BEGIN
+    BLOCK "041904B0"
+    BEGIN
+        VALUE "CompanyName",      "Nivemoon Labs"
+        VALUE "FileDescription",  "MicPlus - управление микрофоном"
+        VALUE "FileVersion",      "1.4.0.0"
+        VALUE "InternalName",     "micplus"
+        VALUE "OriginalFilename", "micplus.exe"
+        VALUE "ProductName",      "MicPlus"
+        VALUE "ProductVersion",   "1.4"
+        VALUE "Comments",         "Разработано Nivemoon Labs"
+        VALUE "LegalCopyright",   "Copyright (C) 2026 Nivemoon Labs"
+    END
+END
+
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0419, 1200
+    END
+END
+
 #define IDI_APPICON        101
 #define IDI_ICON_ON_LIGHT  102
 #define IDI_ICON_ON_DARK   103
 #define IDI_ICON_OFF_RED   104
 
+#define IDD_ABOUT          3010
+#define IDC_ABOUT_LINK     3011
+#define IDC_ABOUT_NAME     3012
+#define IDC_ABOUT_VERSION  3013
+#define IDC_ABOUT_DESC     3014
+#define IDC_ABOUT_AUTHOR   3015
+
 IDI_APPICON        ICON "micplus_app.ico"
 IDI_ICON_ON_LIGHT  ICON "mic_on_light.ico"
 IDI_ICON_ON_DARK   ICON "mic_on_dark.ico"
 IDI_ICON_OFF_RED   ICON "mic_off_red.ico"
+
+IDD_ABOUT DIALOGEX 0, 0, 285, 125
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER |
+      WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About"
+FONT 9, "Segoe UI"
+BEGIN
+    ICON        IDI_APPICON, -1, 14, 12, 32, 32
+
+    LTEXT       "MicPlus", IDC_ABOUT_NAME, 58, 14, 210, 14
+	LTEXT       "Version 1.4.0", IDC_ABOUT_VERSION, 58, 32, 210, 12
+	LTEXT       "Global microphone and PTT control",
+            IDC_ABOUT_DESC, 58, 48, 210, 12
+
+    LTEXT       "Author: nivemoon",
+            IDC_ABOUT_AUTHOR, 14, 70, 250, 12
+
+    CONTROL     "github.com/nivemoon/micplus",
+                IDC_ABOUT_LINK,
+                "STATIC",
+                SS_LEFT | SS_NOTIFY,
+                14, 87, 250, 13
+
+    DEFPUSHBUTTON "OK", IDOK, 222, 105, 48, 14
+END
