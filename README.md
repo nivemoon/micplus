@@ -8,6 +8,11 @@
 - `micctl.exe` — консольная утилита мгновенного переключания микрофона.
 - `sounds` - папка с аудиосигналами (можете заменить своими)
 
+<img width="218" height="95" alt="ElUs88mR2L" src="https://github.com/user-attachments/assets/004a302d-aca5-47e5-8b86-e8757774e923" />
+<img width="270" height="168" alt="ipzOMPSGbC" src="https://github.com/user-attachments/assets/63cf06ef-b3da-4d0f-a6db-ec6082792ebc" />
+<img width="230" height="124" alt="ejDg8Sypqa" src="https://github.com/user-attachments/assets/7494c5d3-9372-4282-b74f-9d30aa2982f8" />
+
+
 > English description is available below.
 
 # Обновление 1.4
